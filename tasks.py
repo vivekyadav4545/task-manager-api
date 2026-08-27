@@ -6,11 +6,12 @@ from database import get_db
 import schemas 
 import models
 from users import get_current_user
+from cache import set_cached ,get_cached ,invalidate_user_tasks ,task_key,task_list_key #new
 
 router = APIRouter(prefix="/tasks" , tags=["tasks"])
 
 @router.post("/" , response_model=schemas.TaskResponse , status_code=status.HTTP_201_CREATED)
-def create_task(
+async def create_task(
     task: schemas.TaskCreate,
     db: session = Depends(get_db),
     current_user : models.User = Depends(get_current_user)
@@ -19,15 +20,25 @@ def create_task(
     db.add(new_task)
     db.commit()
     db.refresh(new_task)
+
+    #remove from redis bcoz value changes
+    await invalidate_user_tasks(current_user.id)
     return new_task
 
 @router.get("/", response_model=List[schemas.TaskResponse])
-def list_task(
+async def  list_task(
     skip: int = 0,
     limit: int = 10, 
     db : session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
+    key = task_list_key(current_user.id , skip , limit)
+
+    #if present in redis return 
+    cached = await get_cached(key)
+    if cached is not None:
+        return cached
+    
     tasks = (
         db.query(models.Task)
         .filter(models.Task.owner_id == current_user.id)
@@ -35,14 +46,27 @@ def list_task(
         .limit(limit)
         .all()
         )
+
+    #if not present in cache
+    result = []
+    for t in tasks:
+        validated = schemas.TaskResponse.model_validate(t)
+        result.append(validated.model_dump(mode="json"))
+    await set_cached(key , result)
     return tasks
 
 @router.get("/{task_id}",response_model=schemas.TaskResponse)
-def get_task(
+async def get_task(
     task_id : int ,
     db: session = Depends(get_db),
     current_user : models.User = Depends(get_current_user)
 ):
+    key = task_key(current_user.id , task_id)
+    # if present return 
+    cached = await get_cached(key)
+    if cached is not None:
+        return cached
+    
     task = db.query(models.Task).filter(models.Task.id == task_id).first()
 
     if not task:
@@ -52,10 +76,13 @@ def get_task(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to access this task")
 
+    #if not present in cache
+    result = schemas.TaskResponse.model_validate(task).model_dump(mode="json")
+    await set_cached(key , result)
     return task
 
 @router.put("/{task_id}",response_model=schemas.TaskResponse)
-def update_task(
+async def update_task(
     task_id: int,
     task_update: schemas.TaskUpdate ,
     db: session = Depends(get_db),
@@ -74,12 +101,15 @@ def update_task(
 
     db.commit()
     db.refresh(task)
+
+    #remove from cache bcoz value changes
+    await invalidate_user_tasks(current_user.id)
     return task
 
 
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
 
-def delete_task(
+async def delete_task(
     task_id: int ,
     db: session=Depends(get_db),
     current_user: models.User= Depends(get_current_user)
@@ -93,6 +123,9 @@ def delete_task(
 
     db.delete(task)
     db.commit()
+
+    #remove from cache because value changes
+    await invalidate_user_tasks(current_user.id) 
     return None
 
     

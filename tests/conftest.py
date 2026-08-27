@@ -2,11 +2,19 @@ import pytest
 import os 
 os.environ["TESTING"] = "true"
 
+## this is added because of redis
+import asyncio
+import sys
+
+
 from dotenv import load_dotenv
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+# this is used to solve problem of event loop closed
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 load_dotenv()
 
@@ -37,6 +45,17 @@ def create_and_delete_db():
     yield
     Base.metadata.drop_all(bind= engine)
 
+##to  solve the problem of redis event loop closed
+@pytest.fixture(scope="function", autouse=True)
+def reset_redis_client():
+    yield
+    import cache
+    import redis.asyncio as redis
+    from config import settings
+    cache.redis_client = redis.from_url(settings.redis_url, decode_responses=True)
+
+
 @pytest.fixture()
 def client():
-    return TestClient(app)
+    with TestClient(app) as c:
+        yield c

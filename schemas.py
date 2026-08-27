@@ -1,4 +1,4 @@
-from pydantic import BaseModel , EmailStr 
+from pydantic import BaseModel , EmailStr  ,ConfigDict
 from typing import Optional
 
 
@@ -12,8 +12,7 @@ class UserResponse(BaseModel):
     id: int
     email: EmailStr
 
-    class config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 #-----------------task schema------------------
 
@@ -34,8 +33,7 @@ class TaskResponse(BaseModel):
     completed: bool
     owner_id: int
 
-    class config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 #-----------------auth schema-----------------
 
