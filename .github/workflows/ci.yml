@@ -9,20 +9,11 @@ on:
     branches: [main]         # runs whenever a PR targeting main is opened/updated
 
 # A workflow is made of one or more "jobs".
-# Each job runs on its OWN fresh, empty virtual machine — nothing is shared
-# between jobs unless you explicitly pass it (e.g. via artifacts).
 jobs:
 
-  # ---------------------------------------------------------------------
-  # JOB 1: Run the test suite
-  # ---------------------------------------------------------------------
   test:
-    runs-on: ubuntu-latest   # use a fresh Ubuntu VM provided by GitHub
+    runs-on: ubuntu-latest   
 
-    # "services" are extra containers that run ALONGSIDE this job, just for
-    # its duration. This is the CI equivalent of your local
-    # `docker compose up` for db + redis — GitHub starts them, waits for
-    # their healthchecks, and exposes them on localhost for this job's steps.
     services:
       postgres:
         image: postgres:16
@@ -31,7 +22,7 @@ jobs:
           POSTGRES_PASSWORD: testpassword
           POSTGRES_DB: taskmanager_test
         ports:
-          - 5432:5432        # exposes Postgres on localhost:5432 for this job
+          - 5432:5432       
         options: >-
           --health-cmd "pg_isready -U postgres"
           --health-interval 5s
